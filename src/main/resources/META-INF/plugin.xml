@@ -1,0 +1,29 @@
+<idea-plugin>
+    <id>com.parmon.intellij-test-generating-plugin</id>
+    <name>Plugin display name here</name>
+    <!--<vendor email="support@yourcompany.com" url="http://www.yourcompany.com">YourCompany</vendor>-->
+
+    <description><![CDATA[
+    A plugin developed for faster creating test methods<br>
+    and for the fukin graduation work
+    ]]></description>
+
+    <!-- please see http://www.jetbrains.org/intellij/sdk/docs/basics/getting_started/plugin_compatibility.html
+         on how to target different products -->
+    <!-- uncomment to enable plugin in all products
+    <depends>com.intellij.modules.lang</depends>
+    -->
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- Add your extensions here -->
+    </extensions>
+
+    <actions>
+        <!-- Add your actions here -->
+        <action id="generateTests" class="action.GenerateTestsAction" text="Test generator"
+                description="generates tests">
+            <add-to-group group-id="GenerateGroup" anchor="last"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="alt T"/>
+        </action>
+    </actions>
+</idea-plugin>
