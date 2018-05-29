@@ -20,10 +20,10 @@
 
     <actions>
         <!-- Add your actions here -->
-        <action id="generateTests" class="action.GenerateTestsAction" text="Test generator"
+        <action id="generateTests" class="action.GenerateTestsAction" text="Tests"
                 description="generates tests">
             <add-to-group group-id="GenerateGroup" anchor="last"/>
-            <keyboard-shortcut keymap="$default" first-keystroke="alt T"/>
+            <keyboard-shortcut keymap="$default" first-keystroke="ctrl alt T"/>
         </action>
     </actions>
 </idea-plugin>

@@ -1,40 +1,99 @@
 package action;
 
-import com.intellij.openapi.actionSystem.*;
+import com.intellij.openapi.actionSystem.AnAction;
+import com.intellij.openapi.actionSystem.AnActionEvent;
+import com.intellij.openapi.actionSystem.DataKeys;
+import com.intellij.openapi.command.WriteCommandAction;
 import com.intellij.openapi.editor.Editor;
-import com.intellij.openapi.project.Project;
 import com.intellij.openapi.ui.Messages;
-import com.intellij.psi.PsiElement;
-import com.intellij.psi.PsiFile;
-import com.intellij.psi.PsiMethod;
-import com.intellij.psi.javadoc.PsiDocComment;
+import com.intellij.psi.*;
 import com.intellij.psi.javadoc.PsiDocTag;
 import com.intellij.psi.util.PsiTreeUtil;
+import exception.BadArchitectureException;
+import org.apache.commons.lang.WordUtils;
 import org.jetbrains.annotations.NotNull;
+import org.jetbrains.annotations.Nullable;
+import ui.ChooseTestsDialog;
+import util.CreationUtil;
+import util.PsiFileElementsUtil;
+import util.PsiJavadocUtil;
 
-import javax.annotation.Nullable;
-import java.util.Arrays;
-import java.util.Collections;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Stack;
 
 public class GenerateTestsAction extends AnAction {
 
     @Override
-    public void actionPerformed(AnActionEvent e) {
-        PsiMethod psiMethod = getPsiMethod(e);
-        assert psiMethod != null; // it is not null for sure as checked at `update` method
-        List<PsiDocTag> shouldTags = getShouldTags(psiMethod);
-//        Messages.showMessageDialog(project, method.getName(), "Greeting", Messages.getInformationIcon());
+    public void actionPerformed(AnActionEvent event) {
+        PsiMethod psiMethod = getPsiMethod(event);
+        List<PsiDocTag> shouldTags = PsiJavadocUtil.getShouldTags(psiMethod);
+        List<String> requirements = new ArrayList<>();
+        if (shouldTags.size() > 1) {
+            ChooseTestsDialog dialog = new ChooseTestsDialog(psiMethod);
+            dialog.show();
+            if (!dialog.isOK())
+                return;
+            requirements = dialog.getRequirements();
+        } else if (shouldTags.size() == 1) {
+            requirements.add(PsiJavadocUtil.getRequirementFromShouldTag(shouldTags.get(0)));
+        } else {
+            requirements.add("Work");
+        }
+
+        try {
+            PsiFile testFile = getTestFile(psiMethod);
+            generateTests(psiMethod, (PsiJavaFile) testFile, requirements);
+        } catch (BadArchitectureException ex) {
+            Messages.showErrorDialog("Place your code inside `src` directory!", "Bad Architecture");
+        }
     }
 
-    private List<PsiDocTag> getShouldTags(PsiMethod psiMethod) {
-        PsiDocComment psiDocComment = psiMethod.getDocComment();
-        if (psiDocComment == null)
-            return Collections.emptyList();
-        return Arrays.stream(psiDocComment.getTags())
-                .filter(t -> "should".equals(t.getName()))
-                .collect(Collectors.toList());
+    private PsiFile getTestFile(PsiMethod method) throws BadArchitectureException {
+        PsiDirectory directoryForTestFile = getDirectoryForTestFile(method);
+        PsiJavaFile baseFile = (PsiJavaFile) method.getContainingFile();
+        String testFileName = baseFile.getName().replace(".java", "Test.java");
+        if (directoryForTestFile.findFile(testFileName) == null)
+            CreationUtil.createFile(directoryForTestFile, testFileName, baseFile.getPackageName());
+        return directoryForTestFile.findFile(testFileName);
+    }
+
+    private PsiDirectory getDirectoryForTestFile(PsiMethod method) throws BadArchitectureException {
+        PsiDirectory dir = method.getContainingFile().getContainingDirectory();
+        Stack<String> path = new Stack<>();
+        while (!dir.getName().equals("src")) {
+            path.push(dir.getName());
+            dir = dir.getParent();
+            if (dir == null)
+                throw new BadArchitectureException();
+        }
+        while (!path.isEmpty()) {
+            String nextDirName = path.pop();
+            if ("main".equals(nextDirName))
+                nextDirName = "test";
+            if (dir.findSubdirectory(nextDirName) == null)
+                CreationUtil.createDirectory(dir, nextDirName);
+            dir = dir.findSubdirectory(nextDirName);
+        }
+        return dir;
+    }
+
+    private void generateTests(PsiMethod method, PsiJavaFile testFile, List<String> requirements) {
+        new WriteCommandAction.Simple(testFile.getProject()) {
+            @Override
+            protected void run() throws Throwable {
+                PsiClass testClass = testFile.getClasses()[0];
+                for (String requirement : requirements) {
+                    String testMethodName = method.getName() + "Should"
+                            + WordUtils.capitalizeFully(requirement).replace(" ", "");
+                    for (char c : testMethodName.toCharArray())
+                        if (!Character.isJavaIdentifierPart(c))
+                            testMethodName = testMethodName.replace("" + c, "");
+                    if (!PsiFileElementsUtil.classContainsMethod(testClass, testMethodName))
+                        PsiFileElementsUtil.addTestMethodToClass(testClass, testMethodName);
+                }
+            }
+        }.execute();
     }
 
     @Override
